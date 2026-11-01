@@ -61,8 +61,6 @@ radio itself keeps working normally.
    `Serving radio 192.168.x.x:8080 as uuid:… at http://…:8099/dd.xml`.
 3. Make sure the **DLNA** provider is enabled in Music Assistant. The radio
    appears as a player within a few minutes.
-4. In Music Assistant open **Settings → Players → (your radio)** and set
-   **Output codec** to **MP3** (see below).
 
 Give the radio a fixed IP address in your router (for a FRITZ!Box: *Home
 Network → Network → device → Always assign this network device the same IPv4
@@ -76,13 +74,22 @@ address*), otherwise the add-on loses it after a DHCP change.
 | `radio_port` | `8080` | Port of the radio's DLNA renderer |
 | `port` | `8099` | Port the add-on listens on |
 | `friendly_name` | radio's name | Optional player name shown in Music Assistant |
+| `force_mp3` | `true` | Request MP3 streams instead of formats the radio rejects (see below) |
 
-## Output codec: use MP3
+## Audio format: MP3
 
 Music Assistant streams FLAC to DLNA players by default. These radios only
 accept MP3 and AAC and reject FLAC with UPnP error `714 Illegal MIME type`, so
-nothing plays. Set the player's **Output codec** to **MP3** (AAC also works).
-The setting may only be visible with advanced settings enabled.
+nothing would play.
+
+With `force_mp3` enabled (the default) the add-on rewrites the stream URL in
+each play command from `.flac`/`.wav` to `.mp3`. Music Assistant picks the
+stream format from that extension, so it sends MP3 regardless of the player's
+**Output codec** setting. MP3 and AAC URLs are left unchanged.
+
+If you disable `force_mp3`, set the player's **Output codec** to **MP3** (or
+AAC) in Music Assistant instead. The setting may only be visible with advanced
+settings enabled.
 
 ## Groups
 
@@ -106,13 +113,14 @@ the same symptom will likely work too. Reports are welcome.
   radio is reachable from Home Assistant, and wait up to five minutes. Enabling
   *allow network scan for discovery* in the Music Assistant DLNA provider can
   help.
-* **Player appears but nothing plays:** set the output codec to MP3 (see
-  above).
+* **Player appears but nothing plays:** check the add-on log. Errors the
+  radio returns are logged, e.g. `Radio rejected SetAVTransportURI: 714
+  Illegal MIME type` means an unsupported format: keep `force_mp3` enabled
+  or set the output codec to MP3.
 * **Player vanished after a Music Assistant update (2.10+):** update this
   add-on to 1.1.0 or later. Older versions let Music Assistant identify the
   player by the Home Assistant host's IP, so it got merged into another player
-  on that host. After updating, the radio appears as a new player; set its
-  output codec to MP3 again.
+  on that host. After updating, the radio appears as a new player.
 * **Log says the radio is not reachable:** the radio is off at the mains or
   its IP changed. The add-on retries every 30 seconds.
 * **Home Assistant shows a newly discovered DLNA device:** that is this

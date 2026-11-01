@@ -15,8 +15,7 @@ control requests to it. Audio goes directly from Music Assistant to the radio.
 3. Add `https://github.com/twesio/ha-frontier-dlna-fix` and close the dialog.
 4. Install **Frontier DLNA Fix**, set `radio_host` on the **Configuration**
    tab and start it.
-5. In Music Assistant set the radio player's **Output codec** to **MP3**.
 
-Full documentation (how it works, options, codec, groups, troubleshooting):
+Full documentation (how it works, options, audio format, groups, troubleshooting):
 [frontier_dlna_fix/DOCS.md](frontier_dlna_fix/DOCS.md), also shown on the
 add-on's **Documentation** tab in Home Assistant.

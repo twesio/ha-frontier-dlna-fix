@@ -5,7 +5,8 @@ clients such as Music Assistant ignore it. This sidecar:
 
 * serves a corrected description (with serviceList and its own UDN) on /dd.xml,
 * relays all other HTTP requests (SCPD, SOAP control, SUBSCRIBE) to the radio,
-* announces itself via SSDP so it is discovered like a normal renderer.
+* announces itself via SSDP so it is discovered like a normal renderer,
+* optionally rewrites stream URLs to MP3, since these radios reject FLAC/WAV.
 
 Audio streams and event NOTIFYs flow directly between the client and the radio.
 """
@@ -33,12 +34,20 @@ NOTIFY_INTERVAL = 300
 SERVICES = ("AVTransport", "RenderingControl", "ConnectionManager")
 SERVER = "Linux UPnP/1.0 frontier-dlna-fix/1.0"
 HOP_HEADERS = {"connection", "keep-alive", "transfer-encoding", "content-length", "host"}
+# Stream URLs ending in a format the radio can't play, e.g. Music Assistant's
+# ".../<player_id>.flac" or ".../<player_id>.wav;codec=pcm;rate=44100;...".
+UNSUPPORTED_URL_RE = re.compile(
+    r"(https?://[^<>\s\"]*?/[^/<>\s\"?]+)\.(?:flac|wav|aiff?|ogg|opus|alac|pcm)(?:(?:;|%3[Bb])[^<>\s\"&?]*)?",
+)
+UNSUPPORTED_MIME_RE = re.compile(r"(http-get:\*:)audio/(?:x-)?(?:flac|wav|wave|aiff|ogg|opus|L16[^:]*)(:)")
+DLNA_PN_RE = re.compile(r"DLNA\.ORG_PN=[A-Za-z0-9_]+;?")
+SET_URI_ACTIONS = ("#SetAVTransportURI", "#SetNextAVTransportURI")
 
 log = logging.getLogger("frontier_dlna_fix")
 
 
 def load_options() -> dict:
-    opts = {"radio_host": "", "radio_port": 8080, "port": 8099, "friendly_name": ""}
+    opts = {"radio_host": "", "radio_port": 8080, "port": 8099, "friendly_name": "", "force_mp3": True}
     try:
         with open("/data/options.json", encoding="utf-8") as f:
             opts.update(json.load(f))
@@ -51,7 +60,31 @@ def load_options() -> dict:
         sys.exit("radio_host is not configured")
     opts["radio_port"] = int(opts["radio_port"])
     opts["port"] = int(opts["port"])
+    if isinstance(opts["force_mp3"], str):
+        opts["force_mp3"] = opts["force_mp3"].lower() in ("1", "true", "yes", "on")
     return opts
+
+
+def rewrite_to_mp3(body: bytes) -> bytes:
+    """Point stream URLs and protocolInfo of a SetAVTransportURI request at MP3.
+
+    Music Assistant picks the stream format from the URL's extension, so asking
+    for ".mp3" instead of ".flac" makes it encode MP3, which these radios accept.
+    """
+    text = body.decode("utf-8", errors="replace")
+    new = UNSUPPORTED_URL_RE.sub(r"\1.mp3", text)
+    if new != text:
+        new = UNSUPPORTED_MIME_RE.sub(r"\1audio/mpeg\2", new)
+        new = DLNA_PN_RE.sub("", new)
+    return new.encode("utf-8")
+
+
+def soap_fault(body: bytes) -> str:
+    """Return 'code description' of a UPnP SOAP fault, or an empty string."""
+    text = body.decode("utf-8", errors="replace")
+    code = re.search(r"<errorCode>\s*(\d+)\s*</errorCode>", text)
+    desc = re.search(r"<errorDescription>(.*?)</errorDescription>", text, re.S)
+    return " ".join(m.group(1).strip() for m in (code, desc) if m)
 
 
 def local_ip_for(host: str) -> str:
@@ -121,7 +154,7 @@ class Radio:
         self.description = xml.encode("utf-8")
 
 
-def make_handler(radio: Radio):
+def make_handler(radio: Radio, force_mp3: bool = True):
     class Handler(BaseHTTPRequestHandler):
         server_version = SERVER
         protocol_version = "HTTP/1.1"
@@ -154,12 +187,23 @@ def make_handler(radio: Radio):
             body = self.rfile.read(length) if length else None
             headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_HEADERS}
             headers["Host"] = f"{radio.host}:{radio.port}"
+            action = self.headers.get("SOAPACTION", "").strip('"')
+            if body and force_mp3 and action.endswith(SET_URI_ACTIONS):
+                rewritten = rewrite_to_mp3(body)
+                if rewritten != body:
+                    log.info("Requesting MP3 instead of an unsupported stream format")
+                    body = rewritten
             try:
                 status, reason, resp_headers, resp_body = radio.request(self.command, self.path, body, headers)
             except OSError as err:
                 log.warning("Relaying %s %s failed: %s", self.command, self.path, err)
                 self._send(502, "Bad Gateway", [], b"")
                 return
+            if status >= 400 and self.command == "POST":
+                fault = soap_fault(resp_body)
+                log.warning("Radio rejected %s: %s", action.rpartition("#")[2] or self.path, fault or status)
+                if fault.startswith("714"):
+                    log.warning("Set the player's output codec to MP3 or enable force_mp3")
             self._send(status, reason, resp_headers, resp_body)
 
         do_GET = do_HEAD = do_POST = do_SUBSCRIBE = do_UNSUBSCRIBE = _handle
@@ -284,7 +328,7 @@ def main() -> None:
 
     local_ip = local_ip_for(radio.host)
     location = f"http://{local_ip}:{opts['port']}/dd.xml"
-    httpd = ThreadingHTTPServer(("0.0.0.0", opts["port"]), make_handler(radio))
+    httpd = ThreadingHTTPServer(("0.0.0.0", opts["port"]), make_handler(radio, opts["force_mp3"]))
     ssdp = Ssdp(radio, location, local_ip)
 
     def shutdown(*_):

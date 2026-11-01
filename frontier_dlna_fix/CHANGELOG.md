@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- New option `force_mp3` (on by default): play commands asking for FLAC or
+  WAV are rewritten to MP3, which the radio accepts. Setting the output codec
+  in Music Assistant is no longer needed.
+- Log errors returned by the radio (e.g. `714 Illegal MIME type`) to the
+  add-on log.
+
 ## 1.1.0
 
 - Fix the player disappearing in Music Assistant 2.10+. Its protocol linking

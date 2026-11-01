@@ -1,5 +1,5 @@
 name: Frontier DLNA Fix
-version: "1.1.0"
+version: "1.2.0"
 slug: frontier_dlna_fix
 description: Makes Frontier Silicon radios with a broken DLNA description (e.g. Kenwood CR-ST100S) usable in Music Assistant
 url: https://github.com/twesio/ha-frontier-dlna-fix
@@ -16,8 +16,10 @@ options:
   radio_port: 8080
   port: 8099
   friendly_name: ""
+  force_mp3: true
 schema:
   radio_host: str
   radio_port: port
   port: port
   friendly_name: str?
+  force_mp3: bool
