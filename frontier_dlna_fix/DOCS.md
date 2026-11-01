@@ -108,6 +108,11 @@ the same symptom will likely work too. Reports are welcome.
   help.
 * **Player appears but nothing plays:** set the output codec to MP3 (see
   above).
+* **Player vanished after a Music Assistant update (2.10+):** update this
+  add-on to 1.1.0 or later. Older versions let Music Assistant identify the
+  player by the Home Assistant host's IP, so it got merged into another player
+  on that host. After updating, the radio appears as a new player; set its
+  output codec to MP3 again.
 * **Log says the radio is not reachable:** the radio is off at the mains or
   its IP changed. The add-on retries every 30 seconds.
 * **Home Assistant shows a newly discovered DLNA device:** that is this

@@ -89,8 +89,15 @@ class Radio:
         if not radio_udn:
             raise ValueError("radio description has no UDN")
         # Own, stable UDN so clients don't confuse us with the radio's broken entry.
-        self.udn = str(uuid.uuid5(uuid.NAMESPACE_URL, f"frontier-dlna-fix:{radio_udn.group(1)}"))
+        # "v2": IDs from 1.0.0 may be cached in Music Assistant as linked to the wrong device.
+        self.udn = str(uuid.uuid5(uuid.NAMESPACE_URL, f"frontier-dlna-fix:v2:{radio_udn.group(1)}"))
         xml = xml.replace(radio_udn.group(0), f"<UDN>uuid:{self.udn}</UDN>")
+        # Clients such as Music Assistant take the device's IP from presentationURL. Point it
+        # at the radio so it is identified by the radio's address and MAC, not this host's.
+        xml = re.sub(r"\s*<presentationURL>.*?</presentationURL>", "", xml, flags=re.S)
+        xml = xml.replace(
+            "</UDN>", f"</UDN><presentationURL>http://{self.host}/</presentationURL>", 1
+        )
         if self.friendly_name:
             xml = re.sub(
                 r"<friendlyName>.*?</friendlyName>",
